@@ -208,7 +208,7 @@ def extraer_archivo(df_raw):
     return resultado
 
 
-@st.cache_data(show_spinner="📂 Procesando reportes Sage Intacct...")
+@st.cache_data(show_spinner="📂 Procesando reportes Sage Intacct...", ttl=None)
 def procesar_todo(bytes_list, nombres_list):
     import io
     records = []
@@ -312,6 +312,11 @@ with st.sidebar:
     st.markdown("---")
     carteras_sel = st.multiselect("🔍 Filtrar carteras", CARTERAS_VALIDAS, default=[],
                                   help="Vacío = mostrar todas")
+    st.markdown("---")
+    if st.button("🔄 Limpiar caché y reprocesar", help="Fuerza el reprocesamiento de todos los archivos"):
+        procesar_todo.clear()
+        monte_carlo.clear()
+        st.rerun()
     st.caption("Connect Assistance México\nAnálisis Operativo del Portafolio\nUniversidad Panamericana")
 
 # ─────────────────────────────────────────────────────────
