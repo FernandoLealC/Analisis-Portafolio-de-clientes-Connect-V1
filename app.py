@@ -83,56 +83,103 @@ def procesar_todo(bytes_list, nombres_list):
                 except: pass
         return None
 
-    def extraer_seccion(df_raw, seccion_label, col_actual=1):
-        """Extrae datos de una sección por nombre de cartera."""
-        datos = {}
-        dentro = False
+    # ── Patrones de sección — acepta Budget, Forecast 1, Forecast 2 ──
+    # Cada var tiene lista de patrones alternativos para manejar variaciones entre años
+    SECTION_PATTERNS_LOCAL = [
+        ('clientes',   [r'kpis\s*-\s*number of clients']),
+        ('servicios',  [r'kpis\s*-\s*service count external',
+                        r'kpis\s*-\s*service count all']),  # variante 2024
+        ('frecuencia', [r'^service frequency$']),
+        ('revenue',    [r'^revenue\s*-\s*sales$']),
+        ('costo_svc',  [r'^service costs external$']),
+        ('avg_costo',  [r'^average service cost']),
+        ('gp_at_risk', [r'^gross profit at risk']),
+        ('loss_ratio', [r'^loss ratio\s*%$']),
+    ]
+    SKIP_RE = re.compile(
+        r'^(total|cost of|gross profit fee|service costs external\s*$|revenue\s*-\s*services)',
+        re.I
+    )
+
+    # Palabras que indican sub-cartera → NO matchear la cartera base
+    _EXCL = {
+        'despachos','moto','motos','siniestro','pesado','acmx',
+        'fleet','demand','services','compa','employees','empleados',
+        'blu','spee','dee',
+    }
+
+    def _match_cartera(nombre):
+        s = nombre.strip()
+        sl = s.lower()
+        if not sl or sl in ('nan','none',''): return None
+        # 1. Exact match
+        for c in CARTERAS_VALIDAS:
+            if c.lower() == sl: return c
+        # 2. Containment — solo si no hay palabras extra significativas
+        for c in CARTERAS_VALIDAS:
+            cl = c.lower()
+            if cl in sl and len(cl) > 4:
+                extra = sl.replace(cl,'').strip(' -').lower()
+                extra_words = set(extra.split())
+                if extra_words & _EXCL: continue
+                if {w for w in extra_words if len(w) > 1}: continue
+                return c
+        # 3. Word overlap — mínimo 75% de palabras del candidato en común
+        s_words = {w for w in sl.split() if len(w) > 2}
+        for c in CARTERAS_VALIDAS:
+            c_words = {w for w in c.lower().split() if len(w) > 2}
+            common = s_words & c_words
+            if len(common) >= 2 and len(common) >= len(c_words) * 0.75:
+                if not (s_words - c_words) & _EXCL:
+                    return c
+        return None
+
+    def _primer_numero(row, max_cols=6):
+        for ci in range(1, max_cols):
+            try:
+                v = str(row.iloc[ci]).strip().replace(',','')
+                if v in ('','nan','None'): continue
+                return float(v)
+            except: pass
+        return None
+
+    def extraer_archivo(df_raw):
+        """Parser robusto: detecta secciones por regex, ignora sangría y subsecciones."""
+        secs = []
+        seen_vars = set()
         for i, row in df_raw.iterrows():
-            vals = [str(v).strip() if pd.notna(v) else '' for v in row]
-            # Detectar inicio de sección
-            texto = ' '.join(vals).lower()
-            if seccion_label.lower() in texto and not dentro:
-                dentro = True
-                continue
-            if not dentro:
-                continue
-            # Detectar fin de sección (Total o siguiente sección)
-            nombre = vals[0] if vals[0] else (vals[1] if len(vals)>1 else '')
-            if nombre.lower().startswith('total') and seccion_label.split()[0].lower() in nombre.lower():
-                break
-            # Líneas de sección siguientes (saltar si es encabezado de otra)
-            if nombre and not nombre.startswith(' ') and nombre.lower() not in ['', 'nan']:
-                # Es una nueva sección mayor
-                known_sections = ['kpis', 'service freq', 'revenue', 'service costs', 
-                                  'cost of revenue', 'average service', 'gross profit', 'loss ratio']
-                if any(k in nombre.lower() for k in known_sections) and len(nombre) > 15:
+            c0 = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ''
+            if not c0 or c0.lower().startswith('total'): continue
+            for var, patterns in SECTION_PATTERNS_LOCAL:
+                matched_pat = any(re.search(p, c0.lower()) for p in patterns)
+                if matched_pat:
+                    if var == 'costo_svc' and 'costo_svc' in seen_vars: continue
+                    secs.append((i, var))
+                    seen_vars.add(var)
                     break
-            # Buscar cartera
-            cartera_nombre = nombre.strip()
-            if not cartera_nombre:
-                cartera_nombre = vals[1].strip() if len(vals)>1 else ''
-            cartera_nombre = cartera_nombre.strip()
-            if not cartera_nombre or cartera_nombre.lower() in ['nan','']:
-                continue
-            # Emparejar con carteras conocidas
-            matched = None
-            for c in CARTERAS_VALIDAS:
-                if c.lower() == cartera_nombre.lower():
-                    matched = c; break
-            if not matched:
-                for c in CARTERAS_VALIDAS:
-                    if c.lower() in cartera_nombre.lower() or cartera_nombre.lower() in c.lower():
-                        matched = c; break
-            if not matched:
-                continue
-            # Extraer valor actual (primera columna numérica)
-            for vi in range(1, min(len(vals), 5)):
-                try:
-                    val = float(str(vals[vi]).replace(',',''))
-                    datos[matched] = val
-                    break
-                except: pass
-        return datos
+
+        rangos = {}
+        for idx, (fila, var) in enumerate(secs):
+            if var in rangos: continue
+            sig = secs[idx+1][0] if idx+1 < len(secs) else len(df_raw)
+            rangos[var] = (fila+1, sig)
+
+        resultado = {var: {} for var in [s[1] for s in secs]}
+        for var, (ini, fin) in rangos.items():
+            for i in range(ini, min(fin, len(df_raw))):
+                row = df_raw.iloc[i]
+                c0 = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ''
+                c1 = str(row.iloc[1]).strip() if pd.notna(row.iloc[1]) else ''
+                if not c0 and not c1: continue
+                if c0.lower().startswith('total'): continue
+                if SKIP_RE.search(c0.lower()): continue
+                nombre = c0 if c0 and c0.lower() not in ('nan','') else c1
+                cart = _match_cartera(nombre)
+                if not cart: continue
+                val = _primer_numero(row)
+                if val is not None:
+                    resultado[var][cart] = val
+        return resultado
 
     records = []
     errores = []
@@ -147,10 +194,8 @@ def procesar_todo(bytes_list, nombres_list):
             mes_label = fecha.strftime('%Y-%m')
             mes_display = fecha.strftime('%b-%Y')
 
-            # Extraer cada sección
-            extraidos = {}
-            for var, (label, _, __) in SECCIONES_MAPA.items():
-                extraidos[var] = extraer_seccion(df_raw, label)
+            # Extraer todas las secciones con el parser robusto
+            extraidos = extraer_archivo(df_raw)
 
             # Construir registros por cartera
             todas_carteras = set()
@@ -291,8 +336,11 @@ xticks = [mes_display_map.get(m, m) for m in meses_ord]
 st.success(f"✅ **{len([f for f in archivos])} archivos** · **{len(carteras)} carteras** · **{n_meses} períodos** (de {mes_display_map.get(meses_ord[0],'?')} a {mes_display_map.get(meses_ord[-1],'?')})")
 
 def pivot(col, fillna=None):
+    """Pivotea datos manteniendo NaN donde la cartera no existía ese mes.
+    fillna solo se usa cuando se necesita explícitamente (ej. para cálculos de suma).
+    Las gráficas plotly con NaN automáticamente muestran gaps (sin conectar puntos)."""
     p = df_all.pivot_table(index='Mes', columns='Cartera', values=col, aggfunc='mean')
-    p = p.reindex(meses_ord)
+    p = p.reindex(meses_ord)  # mantiene NaN donde no hay datos
     if fillna is not None: p = p.fillna(fillna)
     return p
 
@@ -588,6 +636,7 @@ for c in carteras:
             pct_sobre = (serie > lr_target).mean() * 100
             lr_resumen.append({
                 'Cartera': c,
+                'Meses con datos': len(serie),
                 'LR Promedio': serie.mean(),
                 'LR Máximo': serie.max(),
                 'LR Mínimo': serie.min(),
@@ -673,8 +722,19 @@ lr_hist = lr_pivot.copy()
 rentab_pivot = 1 - lr_hist  # mayor = mejor
 
 carteras_mk = [c for c in carteras if c in rentab_pivot.columns 
-               and rentab_pivot[c].notna().sum() >= 3
+               and rentab_pivot[c].notna().sum() >= min_meses_mk
                and rentab_pivot[c].std() > 0]
+
+excluidas_mk = [c for c in carteras if c in rentab_pivot.columns
+                and 0 < rentab_pivot[c].notna().sum() < min_meses_mk]
+if excluidas_mk:
+    st.markdown(
+        f'<div class="box-warn">📅 <b>{len(excluidas_mk)} cartera(s) excluida(s) del modelo Markowitz</b> '
+        f'por tener menos de {min_meses_mk} meses de Loss Ratio: <b>{", ".join(excluidas_mk)}</b>. '
+        f'Historial insuficiente para calcular volatilidad confiable. '
+        f'Reduce el mínimo en el sidebar si quieres incluirlas con menos datos.</div>',
+        unsafe_allow_html=True
+    )
 
 if len(carteras_mk) >= 2:
     mu_mk    = rentab_pivot[carteras_mk].mean()
@@ -813,6 +873,17 @@ for c in sorted(carteras):
     avg_serie = avg_pivot[c].dropna()  if c in avg_pivot.columns else pd.Series(dtype=float)
     clts_serie = clts_pivot[c].dropna() if c in clts_pivot.columns else pd.Series(dtype=float)
     freq_serie = freq_pivot[c].dropna() if c in freq_pivot.columns else pd.Series(dtype=float)
+    rev_serie  = rev_pivot[c].dropna()  if c in rev_pivot.columns  else pd.Series(dtype=float)
+
+    if lr_serie.empty and rev_serie.empty: continue
+
+    # Antigüedad de la cartera
+    n_meses_cart = max(len(lr_serie), len(rev_serie))
+    es_nueva = n_meses_cart < 12
+    es_reciente = 12 <= n_meses_cart < 18
+    tag_edad = f" · 🆕 {n_meses_cart} meses" if es_nueva else (
+               f" · 📋 {n_meses_cart} meses" if es_reciente else
+               f" · {n_meses_cart} meses")
 
     if lr_serie.empty: continue
 
@@ -845,10 +916,14 @@ for c in sorted(carteras):
     if freq_ult > freq_alerta: extras.append(f"frecuencia de uso en alerta ({freq_ult*1000:.1f}‰)")
     extras_str = "  |  " + " · ".join(extras) if extras else ""
 
+    advertencia_nueva = ""
+    if es_nueva:
+        advertencia_nueva = f' &nbsp;<span style="background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-size:0.8rem">🆕 cartera nueva · solo {n_meses_cart} meses de historial · estadísticas preliminares</span>'
+
     st.markdown(
         f'<div class="{cls_box}">'
-        f'<b>{c}</b> &nbsp;·&nbsp; {cat} &nbsp;·&nbsp; '
-        f'LR: <b>{lr_prom:.3f}</b> {lr_trend}{extras_str}<br>'
+        f'<b>{c}</b>{tag_edad} &nbsp;·&nbsp; {cat} &nbsp;·&nbsp; '
+        f'LR: <b>{lr_prom:.3f}</b> {lr_trend}{extras_str}{advertencia_nueva}<br>'
         f'<small>{accion}</small>'
         f'</div>',
         unsafe_allow_html=True
@@ -868,10 +943,21 @@ costo_alza = [c for c in carteras if c in avg_pivot.columns and len(avg_pivot[c]
 crec_clts = [c for c in carteras if c in clts_pivot.columns and len(clts_pivot[c].dropna()) >= 2
              and (clts_pivot[c].dropna().iloc[-1] - clts_pivot[c].dropna().iloc[0]) / clts_pivot[c].dropna().iloc[0] > 0.20]
 
+# Clasificar carteras por madurez
+carteras_maduras  = [c for c in carteras if c in rev_pivot.columns and rev_pivot[c].notna().sum() >= 18]
+carteras_medias   = [c for c in carteras if c in rev_pivot.columns and 6 <= rev_pivot[c].notna().sum() < 18]
+carteras_nuevas   = [c for c in carteras if c in rev_pivot.columns and rev_pivot[c].notna().sum() < 6]
+
 lines = [
     f"**Análisis basado en {n_meses} períodos** ({mes_display_map.get(meses_ord[0],'?')} → {mes_display_map.get(meses_ord[-1],'?')}) · {len(carteras)} carteras activas.",
     "",
 ]
+if carteras_nuevas:
+    lines.append(f"🆕 **Carteras nuevas** (< 6 meses): {', '.join(carteras_nuevas)}. Sus estadísticas son preliminares — el análisis ganará confianza con más historial.")
+if carteras_medias:
+    lines.append(f"📋 **Carteras en desarrollo** (6–18 meses): {', '.join(carteras_medias)}. Historial suficiente para tendencias, pero el modelo Markowitz las pondera con menor confianza.")
+if carteras_maduras:
+    lines.append(f"✅ **Carteras maduras** (≥ 18 meses): {', '.join(carteras_maduras)}. Historial completo — las conclusiones del modelo son estadísticamente confiables.")
 
 if criticas:
     lines.append(f"🔴 **Carteras críticas** (LR > 90%): {', '.join(criticas)}. Estas carteras están operando con márgenes prácticamente nulos o negativos en servicios. El costo de servicio consume casi todo el revenue. Requieren repricing urgente o renegociación de condiciones.")
