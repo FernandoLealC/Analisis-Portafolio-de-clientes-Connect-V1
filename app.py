@@ -452,7 +452,8 @@ st.markdown('<div class="sec">1 · Clientes Activos — Crecimiento por Cartera<
 fig_clts = go.Figure()
 for i,c in enumerate(carteras):
     if c in clts_pivot.columns and clts_pivot[c].notna().sum() >= 2:
-        fig_clts.add_trace(go.Scatter(x=xticks, y=clts_pivot[c].values,
+        s = clts_pivot[c].dropna()
+        fig_clts.add_trace(go.Scatter(x=[mes_disp.get(m,m) for m in s.index], y=s.values,
             mode='lines+markers', name=c,
             line=dict(width=2, color=PAL[i%len(PAL)]), marker=dict(size=5),
             hovertemplate=f"<b>{c}</b><br>%{{x}}<br>{{y:,.0f}} clientes<extra></extra>"))
@@ -497,7 +498,8 @@ if carts_svc:
 
 fig_svc = go.Figure()
 for i,c in enumerate(carts_svc):
-    fig_svc.add_trace(go.Scatter(x=xticks, y=svc_pivot[c].values,
+    s=svc_pivot[c].dropna()
+    fig_svc.add_trace(go.Scatter(x=[mes_disp.get(m,m) for m in s.index], y=s.values,
         mode='lines+markers', name=c, line=dict(width=2, color=PAL[i%len(PAL)]),
         hovertemplate=f"<b>{c}</b><br>%{{x}}<br>{{y:,.0f}} servicios<extra></extra>"))
 fig_svc.update_layout(title="Evolución de Servicios Mensuales",
@@ -515,7 +517,8 @@ st.markdown(f'<div class="box-info">💡 <b>Frecuencia = servicios / clientes ac
 fig_freq = go.Figure()
 for i,c in enumerate(carteras):
     if c in freq_pivot.columns and freq_pivot[c].notna().sum() >= 2:
-        fig_freq.add_trace(go.Scatter(x=xticks, y=freq_pivot[c].values*100,
+        s=freq_pivot[c].dropna()
+        fig_freq.add_trace(go.Scatter(x=[mes_disp.get(m,m) for m in s.index], y=s.values*100,
             mode='lines+markers', name=c, line=dict(width=2, color=PAL[i%len(PAL)]),
             hovertemplate=f"<b>{c}</b><br>%{{x}}<br>%{{y:.3f}}%<extra></extra>"))
 fig_freq.add_hline(y=freq_alerta*100, line_dash='dot', line_color='#f15b2b',
@@ -544,15 +547,18 @@ st.markdown('<div class="box-info">💡 Si el costo promedio sube sistemáticame
 fig_avg = go.Figure()
 for i,c in enumerate(carteras):
     if c in avg_pivot.columns and avg_pivot[c].notna().sum() >= 2:
-        y = avg_pivot[c].values
-        y_clean = np.array([v for v in y if v is not None and not np.isnan(v)])
-        fig_avg.add_trace(go.Scatter(x=xticks, y=y, mode='lines+markers', name=c,
+        # Usar solo los meses donde hay datos (sin NaN) — evita desalineación de ejes
+        serie = avg_pivot[c].dropna()
+        x_ticks_c = [mes_disp.get(m, m) for m in serie.index]
+        y_vals = serie.values
+        fig_avg.add_trace(go.Scatter(
+            x=x_ticks_c, y=y_vals, mode='lines+markers', name=c,
             line=dict(width=2, color=PAL[i%len(PAL)]),
-            hovertemplate=f"<b>{c}</b><br>${{y:.2f}}/servicio<extra></extra>"))
-        if len(y_clean) >= 3:
-            xn = np.arange(len(y_clean)); z = np.polyfit(xn, y_clean, 1)
+            hovertemplate=f"<b>{c}</b><br>%{{x}}<br>${{y:.2f}}/servicio<extra></extra>"))
+        if len(y_vals) >= 3:
+            xn = np.arange(len(y_vals)); z = np.polyfit(xn, y_vals, 1)
             fig_avg.add_trace(go.Scatter(
-                x=xticks[-len(y_clean):], y=np.poly1d(z)(xn),
+                x=x_ticks_c, y=np.poly1d(z)(xn),
                 mode='lines', line=dict(width=1, dash='dot', color=PAL[i%len(PAL)]),
                 showlegend=False, opacity=0.4,
                 hovertemplate=f"<b>{c} tendencia</b><br>${{y:.2f}}<extra></extra>"))
@@ -592,7 +598,8 @@ st.markdown(f'<div class="box-info">💡 <b>Loss Ratio = Costo de Servicio / Rev
 fig_lr = go.Figure()
 for i,c in enumerate(carteras):
     if c in lr_pivot.columns and lr_pivot[c].notna().sum() >= 2:
-        fig_lr.add_trace(go.Scatter(x=xticks, y=lr_pivot[c].values,
+        s=lr_pivot[c].dropna()
+        fig_lr.add_trace(go.Scatter(x=[mes_disp.get(m,m) for m in s.index], y=s.values,
             mode='lines+markers', name=c, line=dict(width=2.5, color=PAL[i%len(PAL)]),
             hovertemplate=f"<b>{c}</b><br>%{{x}}<br>LR: %{{y:.3f}}<extra></extra>"))
 fig_lr.add_hline(y=lr_target, line_dash='dot', line_color='#f15b2b', line_width=2,
@@ -646,7 +653,8 @@ with c1:
     fig_rpc = go.Figure()
     for i,c in enumerate(carteras):
         if c in rpc_pivot.columns and rpc_pivot[c].notna().sum() >= 2:
-            fig_rpc.add_trace(go.Scatter(x=xticks, y=rpc_pivot[c].values,
+            s=rpc_pivot[c].dropna()
+            fig_rpc.add_trace(go.Scatter(x=[mes_disp.get(m,m) for m in s.index], y=s.values,
                 mode='lines+markers', name=c, line=dict(width=2, color=PAL[i%len(PAL)]),
                 hovertemplate=f"<b>{c}</b><br>${{y:.3f}}/cliente<extra></extra>"))
     fig_rpc.update_layout(title="Revenue por cliente ($)", xaxis_title="Mes",
@@ -656,7 +664,8 @@ with c2:
     fig_gpc = go.Figure()
     for i,c in enumerate(carteras):
         if c in gpc_pivot.columns and gpc_pivot[c].notna().sum() >= 2:
-            fig_gpc.add_trace(go.Scatter(x=xticks, y=gpc_pivot[c].values,
+            s=gpc_pivot[c].dropna()
+            fig_gpc.add_trace(go.Scatter(x=[mes_disp.get(m,m) for m in s.index], y=s.values,
                 mode='lines+markers', name=c, line=dict(width=2, color=PAL[i%len(PAL)]),
                 hovertemplate=f"<b>{c}</b><br>GP ${{'y:.3f}}/cliente<extra></extra>"))
     fig_gpc.update_layout(title="GP At Risk por cliente ($)", xaxis_title="Mes",
