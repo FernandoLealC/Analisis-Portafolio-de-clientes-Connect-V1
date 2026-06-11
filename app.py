@@ -459,6 +459,7 @@ for i,c in enumerate(carteras):
             hovertemplate=f"<b>{c}</b><br>%{{x}}<br>{{y:,.0f}} clientes<extra></extra>"))
 fig_clts.update_layout(title="Evolución de Clientes Activos por Cartera",
     xaxis_title="Mes", yaxis_title="Clientes", height=400,
+    xaxis=dict(categoryorder='array', categoryarray=xticks),
     hovermode='x unified', legend=dict(orientation='h',y=-0.3), margin=dict(t=50,b=10))
 st.plotly_chart(fig_clts, use_container_width=True)
 
@@ -504,6 +505,7 @@ for i,c in enumerate(carts_svc):
         hovertemplate=f"<b>{c}</b><br>%{{x}}<br>{{y:,.0f}} servicios<extra></extra>"))
 fig_svc.update_layout(title="Evolución de Servicios Mensuales",
     xaxis_title="Mes", yaxis_title="Servicios", height=370,
+    xaxis=dict(categoryorder='array', categoryarray=xticks),
     hovermode='x unified', legend=dict(orientation='h',y=-0.3), margin=dict(t=50,b=10))
 st.plotly_chart(fig_svc, use_container_width=True)
 
@@ -525,6 +527,7 @@ fig_freq.add_hline(y=freq_alerta*100, line_dash='dot', line_color='#f15b2b',
     annotation_text=f"Alerta {freq_alerta*1000:.0f}‰", annotation_font=dict(color='#f15b2b',size=10))
 fig_freq.update_layout(title="Frecuencia de Uso (% de clientes que usaron el servicio)",
     xaxis_title="Mes", yaxis_title="Frecuencia (%)", height=400,
+    xaxis=dict(categoryorder='array', categoryarray=xticks),
     hovermode='x unified', legend=dict(orientation='h',y=-0.3), margin=dict(t=50,b=10))
 st.plotly_chart(fig_freq, use_container_width=True)
 
@@ -564,6 +567,7 @@ for i,c in enumerate(carteras):
                 hovertemplate=f"<b>{c} tendencia</b><br>${{y:.2f}}<extra></extra>"))
 fig_avg.update_layout(title="Costo Promedio por Servicio con tendencias",
     xaxis_title="Mes", yaxis_title="$ / servicio", height=420,
+    xaxis=dict(categoryorder='array', categoryarray=xticks),
     hovermode='x unified', legend=dict(orientation='h',y=-0.3), margin=dict(t=50,b=10))
 st.plotly_chart(fig_avg, use_container_width=True)
 
@@ -609,6 +613,7 @@ fig_lr.add_hline(y=1.0, line_dash='solid', line_color='#7f1d1d', line_width=1.5,
     annotation_font=dict(color='#7f1d1d',size=9))
 fig_lr.update_layout(title="Evolución del Loss Ratio por Cartera",
     xaxis_title="Mes", yaxis_title="Loss Ratio", height=450,
+    xaxis=dict(categoryorder='array', categoryarray=xticks),
     hovermode='x unified', legend=dict(orientation='h',y=-0.3), margin=dict(t=55,b=10))
 st.plotly_chart(fig_lr, use_container_width=True)
 
@@ -658,7 +663,8 @@ with c1:
                 mode='lines+markers', name=c, line=dict(width=2, color=PAL[i%len(PAL)]),
                 hovertemplate=f"<b>{c}</b><br>${{y:.3f}}/cliente<extra></extra>"))
     fig_rpc.update_layout(title="Revenue por cliente ($)", xaxis_title="Mes",
-        height=340, hovermode='x unified', legend=dict(orientation='h',y=-0.4), margin=dict(t=50,b=10))
+        height=340, xaxis=dict(categoryorder='array', categoryarray=xticks),
+        hovermode='x unified', legend=dict(orientation='h',y=-0.4), margin=dict(t=50,b=10))
     st.plotly_chart(fig_rpc, use_container_width=True)
 with c2:
     fig_gpc = go.Figure()
@@ -669,7 +675,8 @@ with c2:
                 mode='lines+markers', name=c, line=dict(width=2, color=PAL[i%len(PAL)]),
                 hovertemplate=f"<b>{c}</b><br>GP ${{'y:.3f}}/cliente<extra></extra>"))
     fig_gpc.update_layout(title="GP At Risk por cliente ($)", xaxis_title="Mes",
-        height=340, hovermode='x unified', legend=dict(orientation='h',y=-0.4), margin=dict(t=50,b=10))
+        height=340, xaxis=dict(categoryorder='array', categoryarray=xticks),
+        hovermode='x unified', legend=dict(orientation='h',y=-0.4), margin=dict(t=50,b=10))
     st.plotly_chart(fig_gpc, use_container_width=True)
 
 # ─────────────────────────────────────────────────────────
