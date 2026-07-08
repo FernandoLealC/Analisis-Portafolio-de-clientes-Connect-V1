@@ -711,6 +711,8 @@ if len(carteras_mk) >= 2:
     mu_mk    = rentab_pivot[carteras_mk].mean()
     sigma_mk = rentab_pivot[carteras_mk].std()
     cov_mk   = rentab_pivot[carteras_mk].cov().values
+    cov_mk   = np.nan_to_num(cov_mk, nan=0.0)
+    
 
     # Mapa riesgo-rentabilidad
     fig_mapa = go.Figure()
